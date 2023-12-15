@@ -1,0 +1,210 @@
+---
+title: "Visualize Epi Conservation Data"
+author: "ks"
+date: "2023-12-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sesame)
+library(GenomicRanges)
+library(tidyverse)
+library(parallel)
+```
+
+Load CpG level data on pwds.
+```{r pwd}
+load("data/ec.rdat")
+load("data/crcdev.rda")
+```
+Run epic-annot.Rmd to get annotation file: cpgannot.
+
+Combine with annotation
+```{r merge-ec-cpgannot}
+annoec <- merge(x=cpgannot, 
+                y=ec,
+                all.x = FALSE,
+                all.y = TRUE) %>%
+           arrange(chr,mapinfo)
+```
+
+
+violin plot of single-site locations
+```{r violin plot}
+p <- ggplot( annoec,
+             aes(x=ucsc_refgene_group, y=Mpwd, 
+                 fill=ucsc_refgene_group)) +
+    geom_violin(width=1.4) +
+    geom_boxplot(width=0.1, color="grey", alpha=0.2) +
+    ylim(0,.25)
+p
+```
+
+```{r violin plot}
+p <- ggplot( annoec,
+             aes(x=ucsc_refgene_group, y=Ma, 
+                 fill=ucsc_refgene_group)) +
+    geom_violin(width=1.4) +
+    geom_boxplot(width=0.1, color="grey", alpha=0.2) 
+p
+```
+
+Summarize by gene & group, (later filter by 4 CpGs)
+violin plot of gene-level averages by location
+```{r}
+Mgpec <- annoec %>% group_by(ucsc_refgene_name,ucsc_refgene_group) %>%
+    summarise(
+       Mpwd_avg  = mean(Mpwd, na.rm=TRUE),
+       Ma_avg    = mean(Ma, na.rm=TRUE),
+       n = n()
+    ) %>% arrange(ucsc_refgene_name,ucsc_refgene_group) 
+p <- ggplot( Mgpec,
+             aes(x=ucsc_refgene_group, y=Mpwd_avg, 
+                 fill=ucsc_refgene_group)) +
+    geom_violin(width=1.4) +
+    geom_boxplot(width=0.1, color="grey", alpha=0.2) +
+  ylim(0,.25)
+p
+```
+
+
+Summarize by gene, merge with sc-RNAseq deviances & plot
+```{r gene-ec}
+gene_ec <- annoec %>% group_by(ucsc_refgene_name) %>%
+    summarise(
+       Mpwd_avg  = mean(Mpwd, na.rm=TRUE),
+       Ma_avg    = mean(Ma, na.rm=TRUE),
+       Mpwd_3q   = quantile(Mpwd, probs=0.75, na.rm=T ),
+       n = n()
+    )  %>% filter(n > 10) 
+dim(gene_ec)
+gene_ec <- gene_ec %>%
+          rename(name = ucsc_refgene_name)
+```
+
+```{r}
+gene_dev_ec <- 
+    merge(x = gene_ec,
+          y = crcdev)
+dim(gene_dev_ec)
+```
+
+Now create the same figure Darryl wouldn't use for Figure 4.
+```{r fig4-tumorM, fig.height=2, fig.width=3, echo=FALSE}
+rvar <- cor(gene_dev_ec$Mpwd_avg,
+            gene_dev_ec$jdev) %>%
+          round(2)
+
+dat_text <- data.frame(
+  label = paste("cor =",rvar)
+)
+
+pe <- ggplot(gene_dev_ec,aes(x=Mpwd_avg, y=jdev)) +
+  geom_point(shape = ".", alpha = 0.4) + 
+  geom_smooth(method="lm",color="red") +
+  theme( axis.text=element_text(size=8),
+         axis.title=element_text(size=10),
+         panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black", fill=NA)) +
+  ylab("Expression Deviance (log2)") +
+  xlab("conservation (PWD)") +
+  ylim(-0.5,20) + xlim(0,0.25) + ggtitle("Tumor M") +
+  geom_text( 
+      data    = dat_text,
+      mapping = aes(x = 0.15, y = 12, label = label),
+      hjust   = -0.05,
+      vjust   = -1
+    )
+
+pe 
+
+#ggsave("figs/sesame-tumorM.png",    plot = last_plot(),    width = 3,    height = 2,    dpi = 300,    units = "in" )
+```
+
+
+Now go back and split genes into promoter/non-promoter, and repeat the plots.
+Define promoter as TS200 + 1st Exon.  Summarize by promoter & 'non-promoter
+```{r}
+promoter <- is.element(annoec$ucsc_refgene_group,
+                       c("1stExon","TSS200"))
+table(annoec$ucsc_refgene_group,promoter)
+```
+
+```{r}
+annoec <- cbind.data.frame(annoec,promoter)
+annoec$promoter <- as.numeric(annoec$promoter)
+```
+
+```{r gene-ec}
+gene_ec <- annoec %>% group_by(ucsc_refgene_name,
+                               promoter) %>%
+    summarise(
+       Mpwd_avg  = mean(Mpwd, na.rm=TRUE),
+       Ma_avg    = mean(Ma, na.rm=TRUE),
+       n = n()
+    )  %>% filter(n > 3) 
+dim(gene_ec)
+gene_ec <- gene_ec %>%
+          rename(name = ucsc_refgene_name)
+```
+
+```{r}
+gene_dev_ec <- 
+    merge(x = gene_ec,
+          y = crcdev)
+dim(gene_dev_ec)
+```
+
+Now create the figures by promoter status.
+```{r cor-dev-pwd}
+rdev <- NULL
+for (i in 2:1){
+   filtdat <- gene_dev_ec %>% 
+                    filter(promoter == (i-1) )
+   rdev[i] <- cor(filtdat$Mpwd_avg,
+                 filtdat$jdev)
+}
+rdev <- round(rdev,2)
+cbind.data.frame(region=c("Promoter","non-Promoter"),
+                 rdev)
+```
+
+These correlations are less than using the whole gene (cor=-0.55). Are they correlated?
+
+
+```{r sesamedev}
+dat_text <- data.frame(
+  label = paste("cor =",rdev),
+  region  = c("Promoter","non-Promoter")
+)
+
+pe <- ggplot(gene_dev_ec,
+              aes(x=Mpwd_avg, y=jdev)) +
+  geom_point(shape = ".", alpha = 0.4) + 
+  geom_smooth(method="lm",color="red") +
+  theme( panel.background = element_blank(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA)) +
+  ylab("Expression Deviance (Log2)") +
+  xlab("conservation (avgPWD)") +
+  ylim(-0.5,20) + xlim(0,0.3) 
+
+pe +  facet_wrap( ~ region , nrow=2) +
+      geom_text( 
+      data    = dat_text,
+      mapping = aes(x = 0.15, y = 12, label = label),
+      hjust   = -0.05,
+      vjust   = -1
+    )
+```
+
+
+
+```{r sI}
+sessionInfo()
+```
+

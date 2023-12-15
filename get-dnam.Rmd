@@ -1,0 +1,113 @@
+---
+title: "Get paired DNAm differences"
+author: "ks"
+date: "2023-12-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sesame)
+library(GenomicRanges)
+library(tidyverse)
+library(parallel)
+```
+
+
+
+## Process Idats
+
+Tumor M Plate 1350   
+Tumor MA,MB barcodes: 200705860031_R04C01,
+200705860031_R05C01
+
+Tumor I Plate 1688
+Tumor IA1, IB2 barcodes:  204367410162_R03C01
+204367410162_R04C01
+
+Directory:
+~kims/Google Drive/My Drive/shibata/Shibata EPIC Data/datajy.
+
+```{r dir}
+idat_dir <- c("~kims/Google Drive/My Drive/shibata/Shibata EPIC Data/datajy")
+```
+
+
+Read in the beta values and compute for each sample, the fraction of features with missing data.
+
+```{r Sesame Info}
+betas = openSesame(idat_dir, func = getBetas) # getBetas is the default
+#nrow(betas)
+betas <-  betas[substr(rownames(betas),1,2)=="cg" ,]
+nrow(betas)
+apply(is.na(betas),2,mean)
+```
+
+This is a lot of missing data.  It must be applying masks.  Let's filter on ucsc_refgene_name, and compute the proportion of features masked in each gene.
+First we have to merge in the refseq gene names. Then save CpGs in genes.
+
+```{r}
+betas <- cbind.data.frame(IlmnID = rownames(betas),
+                          betas)
+beta2 <- merge(betas, cpgannot) 
+beta_gene <- beta2 %>%
+        filter(!is.na(ucsc_refgene_name))
+dim(beta_gene)
+apply(is.na(beta_gene[,c("200705860031_R04C01","200705860031_R05C01",
+                        "204367410162_R03C01","204367410162_R04C01")]),2,mean)
+```
+Sesame masks ~12\% of CGs in Refseq genes due to poor quality probe design. 
+
+
+Compute means and absolute differences.
+```{r}
+ec <- cbind.data.frame( IlmnID = beta_gene$IlmnID,
+                            Md = beta_gene[,"200705860031_R04C01"]-
+                                  beta_gene[,"200705860031_R05C01"],
+                          Mpwd = abs(beta_gene[,"200705860031_R04C01"]-
+                                  beta_gene[,"200705860031_R05C01"]),
+                            Ma = (beta_gene[,"200705860031_R04C01"]+
+                                  beta_gene[,"200705860031_R05C01"])/2,
+                            Id =  beta_gene[,"204367410162_R03C01"]-
+                                  beta_gene[,"204367410162_R04C01"],
+                          Ipwd = abs(beta_gene[,"204367410162_R03C01"]-
+                                  beta_gene[,"204367410162_R04C01"]),
+                            Ia = (beta_gene[,"204367410162_R03C01"]+
+                                   beta_gene[,"204367410162_R04C01"])/2)
+head(ec)
+```
+
+```{r miss-dat}
+nmis <- apply(is.na(ec[,2:5]),1,sum)
+table(nmis)
+```
+
+Remove features that were NAs for all samples.
+```{r filter}
+ec <- ec[nmis!=4,]
+save(ec,file="data/ec.rdat")
+```
+
+
+plot M vs A
+
+```{r  ggplot}
+ggplot(ec,aes(x=Ia,y=Id )) +
+        stat_density2d(aes(fill = after_stat(density)^0.25), geom = "tile",
+                       contour = FALSE, n=200, show.legend=FALSE) +
+        scale_fill_continuous(low="white", high="dodgerblue4")
+```
+
+
+```{r  ggplot}
+ggplot(ec,aes(x=Ia,y=Ipwd )) +
+        stat_density2d(aes(fill = after_stat(density)^0.25), geom = "tile",
+                       contour = FALSE, n=200, show.legend=FALSE) +
+        scale_fill_continuous(low="white", high="dodgerblue4") +
+       geom_smooth(color="red")
+```
+
+```{r sI}
+sessionInfo()
+```
+

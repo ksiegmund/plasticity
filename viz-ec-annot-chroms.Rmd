@@ -1,0 +1,120 @@
+---
+title: "Visualize Epi Conservation Data"
+author: "ks"
+date: "2023-12-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sesame)
+library(GenomicRanges)
+library(tidyverse)
+library(parallel)
+```
+
+Load CpG level data on pwds.
+```{r pwd}
+load("data/ec.rdat")
+load("data/crcdev.rda")
+```
+Run epic-annot.Rmd to get annotation file: cpgannot.
+
+Combine with annotation
+```{r merge-ec-cpgannot}
+annoec <- merge(x=cpgannot, 
+                y=ec,
+                all.x = FALSE,
+                all.y = TRUE) %>%
+           arrange(chr,mapinfo)
+```
+
+Let's explore genes with no expression & require 4 CpGs.
+```{r}
+nodev <- crcdev %>%
+     filter(jdev < 0.5) %>%
+     arrange(name)
+nodev
+```
+
+
+
+```{r count-CpGs}
+cpgcount <- cpgannot  %>%
+      group_by(ucsc_refgene_name)  %>%
+      mutate(n = 1)   %>%
+      summarise(nCpG = sum(n))
+tail(cpgcount)
+
+cpgcount <- cpgcount %>%
+      filter(nCpG > 3)
+
+cpgcount <- cpgcount[!is.na(cpgcount$ucsc_refgene_name),]
+tail(cpgcount)
+
+cpgcount
+```
+
+```{r noexpr-}
+subset <- merge(x = nodev,
+                y = cpgcount,
+                by.x = "name",
+                by.y = "ucsc_refgene_name")
+subset
+```
+
+
+
+Write function to get all CpGs for a single gene and plot beta value vs ranked location. Individually explored: ABCC11, AADACL2-AS1 (binning does nothing)
+```{r}
+annoec %>% 
+    filter(ucsc_refgene_name=="ADARB2") %>%
+    ggplot(aes(x=mapinfo,y=Mpwd)) +
+      geom_point()
+```
+
+```{r}
+annoec %>% 
+    filter(ucsc_refgene_name=="ADARB2") %>%
+    summarize(aMpwd = mean(Mpwd,na.rm=T), 
+              sMpwd = sd(Mpwd,na.rm=T),
+              aIpwd = mean(Ipwd,na.rm=T),
+              sIpwd = sd(Ipwd,na.rm=T))
+```
+Smoothing
+```{r}
+dat <- annoec %>% 
+    filter(ucsc_refgene_name=="ADARB2") 
+max(dat$mapinfo)-min(dat$mapinfo)
+```
+```{r}
+gc <- boundedClusterMaker(dat$chr, pos=dat$mapinfo, assumeSorted = FALSE,
+maxClusterWidth = 1500, maxGap = 500)
+gc
+```
+
+Average by cluster, then gene.
+```{r}
+add_column(dat,gc) %>%
+    group_by(gc) %>%
+    summarize(ablMpwd = mean(Mpwd,na.rm=T)) %>%
+    summarize(Mec = mean(ablMpwd,na.rm=T), sdM =sd(ablMpwd,na.rm=T))
+```
+
+
+
+```{r}
+annoec %>% 
+    filter(ucsc_refgene_name=="ADARB2") %>%
+    summary(Mpwd)
+```
+
+For ABCC11 (29 CpGs) it looks like 75th percentile would have been better than the mean. Also better than averaging over bin averages (16 bins).
+
+This doesn't improve slope of Dev vs. PWD summary. What does improve it is requiring more CpGs than just 4. Go back and get the deviance without the jitter (jdev). 
+
+
+```{r sI}
+sessionInfo()
+```
+
