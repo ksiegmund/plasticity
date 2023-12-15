@@ -57,6 +57,7 @@ cpgannot <- cbind.data.frame(IlmnID = mft$IlmnID,
                                mft$Relation_to_UCSC_CpG_Island,
                              Regulatory_Feature_Group =
                                mft$Regulatory_Feature_Group)
+save(cpgannot,file="data/cpgannot.rda")
 ```
 
 
