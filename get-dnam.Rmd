@@ -35,7 +35,7 @@ idat_dir <- c("~kims/Google Drive/My Drive/shibata/Shibata EPIC Data/datajy")
 
 Read in the beta values and compute for each sample, the fraction of features with missing data.
 
-```{r Sesame Info}
+```{r Sesame}
 betas = openSesame(idat_dir, func = getBetas) # getBetas is the default
 #nrow(betas)
 betas <-  betas[substr(rownames(betas),1,2)=="cg" ,]
@@ -46,7 +46,9 @@ apply(is.na(betas),2,mean)
 This is a lot of missing data.  It must be applying masks.  Let's filter on ucsc_refgene_name, and compute the proportion of features masked in each gene.
 First we have to merge in the refseq gene names. Then save CpGs in genes.
 
-```{r}
+
+```{r filter-to-refseqgenes}
+load("data/cpgannot.rda")
 betas <- cbind.data.frame(IlmnID = rownames(betas),
                           betas)
 beta2 <- merge(betas, cpgannot) 
@@ -59,7 +61,7 @@ apply(is.na(beta_gene[,c("200705860031_R04C01","200705860031_R05C01",
 Sesame masks ~12\% of CGs in Refseq genes due to poor quality probe design. 
 
 
-Compute means and absolute differences.
+Compute differences, means and absolute differences.
 ```{r}
 ec <- cbind.data.frame( IlmnID = beta_gene$IlmnID,
                             Md = beta_gene[,"200705860031_R04C01"]-
@@ -91,7 +93,7 @@ save(ec,file="data/ec.rdat")
 
 plot M vs A
 
-```{r  ggplot}
+```{r  ggplot, cache=TRUE}
 ggplot(ec,aes(x=Ia,y=Id )) +
         stat_density2d(aes(fill = after_stat(density)^0.25), geom = "tile",
                        contour = FALSE, n=200, show.legend=FALSE) +
@@ -99,7 +101,7 @@ ggplot(ec,aes(x=Ia,y=Id )) +
 ```
 
 
-```{r  ggplot}
+```{r  ggplot-pwd, cache=TRUE}
 ggplot(ec,aes(x=Ia,y=Ipwd )) +
         stat_density2d(aes(fill = after_stat(density)^0.25), geom = "tile",
                        contour = FALSE, n=200, show.legend=FALSE) +
