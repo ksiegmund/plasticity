@@ -20,22 +20,27 @@ dim(genet)
 cname <- readxl::read_xlsx(fn,sheet = "gene_tumor",col_names = TRUE,n_max=3)
 cnames <- names(cname)
 cnames[c(1:4,27)] <- as.character(cname[2,c(1:4,27)])
-cnames
+#cnames
 names(genet) <- cnames
   
 dat <- cbind.data.frame(genet,
                         gg = ifelse(!is.na(genet$`DepMap-essential`),
                                    "essential","inducible")
                   )
-
 dat <- dat[!is.na(dat$tumorepi+1),]
 table(dat$gg)
+```
+
+Add some jitter to the values so we can plot the values near 0 and they are not all overlapping.
+
+```{r jitter}
 set.seed(1234)
 dat$jtumorepi <-jitter(dat$`tumorepi+1`,amount=0.5)
 dat[1,]
 ```
 
-```{r}
+And save.
+```{r save-devs}
 crcdev <- cbind.data.frame( name = dat$gene,
                             dev = dat$`tumorepi+1`,
                             jdev = dat$jtumorepi,
