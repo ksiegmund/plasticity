@@ -1,0 +1,122 @@
+---
+title: "Visualize Epi Conservation Data"
+author: "ks"
+date: "2024-01-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sesame)
+library(GenomicRanges)
+library(tidyverse)
+library(parallel)
+```
+
+Load CpG level data on pwds.
+```{r pwd}
+data_dir <- c("~kims/Google Drive/My Drive/shibata/Shibata EPIC Data/datajy/data")
+load(file.path(data_dir,"ec.rdat"))
+load(file.path(data_dir,"crcdev.rda"))
+load(file.path(data_dir,"cpgannot.rda"))
+```
+
+Combine with annotation
+```{r merge-ec-cpgannot}
+annoec <- merge(x=cpgannot, 
+                y=ec,
+                all.x = FALSE,
+                all.y = TRUE) %>%
+           arrange(chr,mapinfo)
+```
+
+Let's find the genes with 4+ CpGs.
+
+```{r count-CpGs}
+cpgcount <- cpgannot  %>%
+      group_by(ucsc_refgene_name)  %>%
+      mutate(n = 1)   %>%
+      summarise(nCpG = sum(n))
+tail(cpgcount)
+
+cpgcount <- cpgcount %>%
+      filter(nCpG > 3)
+
+cpgcount <- cpgcount[!is.na(cpgcount$ucsc_refgene_name),]
+tail(cpgcount)
+
+cpgcount
+```
+
+
+
+
+Summarize by gene, merge with sc-RNAseq deviances & plot
+```{r gene-ec}
+gene_ec <- annoec %>% group_by(ucsc_refgene_name) %>%
+    summarise(
+       Mpwd_avg  = mean(Mpwd, na.rm=TRUE),
+       Ma_avg    = mean(Ma, na.rm=TRUE),
+       Mpwd_3q   = quantile(Mpwd, probs=0.75, na.rm=T ),
+       n = n()
+    )  %>% filter(n > 10) 
+dim(gene_ec)
+gene_ec <- gene_ec %>%
+          rename(name = ucsc_refgene_name)
+```
+
+```{r}
+gene_dev_ec <- 
+    merge(x = gene_ec,
+          y = crcdev)
+dim(gene_dev_ec)
+```
+
+Now create the same figure Darryl wouldn't use for Figure 4.
+```{r fig4-tumorM, fig.height=2, fig.width=3, echo=FALSE}
+rvar <- cor(gene_dev_ec$Mpwd_avg,
+            gene_dev_ec$dev) %>%
+          round(2)
+
+dat_text <- data.frame(
+  label = paste("cor =",rvar)
+)
+
+pe <- ggplot(gene_dev_ec,aes(x=Mpwd_avg, y=jdev)) +
+  geom_point(shape = ".", alpha = 0.4) + 
+  geom_smooth(method="lm",color="red") +
+  theme( axis.text=element_text(size=8),
+         axis.title=element_text(size=10),
+         panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black", fill=NA)) +
+  ylab("Expression Deviance (log2)") +
+  xlab("conservation (PWD)") +
+  ylim(-0.5,20) + xlim(0,0.25) + ggtitle("Tumor M") +
+  geom_text( 
+      data    = dat_text,
+      mapping = aes(x = 0.15, y = 12, label = label),
+      hjust   = -0.05,
+      vjust   = -1
+    )
+
+pe 
+
+#ggsave("figs/sesame-tumorM.png",    plot = last_plot(),    width = 3,    height = 2,    dpi = 300,    units = "in" )
+```
+
+```{r}
+gene_dev_ec
+```
+
+
+```{r}
+annoec %>% filter(ucsc_refgene_name=="A2M")
+```
+
+
+```{r sI}
+sessionInfo()
+```
+
