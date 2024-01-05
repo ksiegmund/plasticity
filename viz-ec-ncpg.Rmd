@@ -7,11 +7,9 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(sesame)
-library(GenomicRanges)
 library(tidyverse)
-library(parallel)
 ```
+
 
 Load CpG level data on pwds.
 ```{r pwd}
@@ -30,36 +28,39 @@ annoec <- merge(x=cpgannot,
            arrange(chr,mapinfo)
 ```
 
-Let's find the genes with 4+ CpGs.
 
-```{r count-CpGs}
-cpgcount <- cpgannot  %>%
-      group_by(ucsc_refgene_name)  %>%
-      mutate(n = 1)   %>%
-      summarise(nCpG = sum(n))
-tail(cpgcount)
-
-cpgcount <- cpgcount %>%
-      filter(nCpG > 3)
-
-cpgcount <- cpgcount[!is.na(cpgcount$ucsc_refgene_name),]
-tail(cpgcount)
-
-cpgcount
+There are different numbers of missing PWD measures in tumors M & I, but it is sparse.
+```{r fraction-missing-data}
+mean(is.na(annoec$Mpwd))
+mean(is.na(annoec$Ipwd))
 ```
 
+Global distribution of PWD.
+```{r distn-cpg-pwd}
+summary(annoec$Mpwd)
+summary(annoec$Ipwd)
+```
 
+What fraction of features have PWD < 0.05? (the cutoff in the paper)
+```{r}
+mean(annoec$Mpwd < 0.05, na.rm=T)
+mean(annoec$Ipwd < 0.05, na.rm=T)
+```
 
+Summarize by gene, merge with sc-RNAseq deviances & plot. First, how does the distribution of gene average PWD compare to the distribution of CpG PWDs?  
 
-Summarize by gene, merge with sc-RNAseq deviances & plot
+DO THIS STILL
 ```{r gene-ec}
 gene_ec <- annoec %>% group_by(ucsc_refgene_name) %>%
     summarise(
        Mpwd_avg  = mean(Mpwd, na.rm=TRUE),
        Ma_avg    = mean(Ma, na.rm=TRUE),
        Mpwd_3q   = quantile(Mpwd, probs=0.75, na.rm=T ),
+       Ipwd_avg  = mean(Ipwd, na.rm=TRUE),
+       Ia_avg    = mean(Ia, na.rm=TRUE),
+       Ipwd_3q   = quantile(Ipwd, probs=0.75, na.rm=T ),
        n = n()
-    )  %>% filter(n > 10) 
+    )  %>% filter(n > 3) 
 dim(gene_ec)
 gene_ec <- gene_ec %>%
           rename(name = ucsc_refgene_name)
@@ -71,6 +72,27 @@ gene_dev_ec <-
           y = crcdev)
 dim(gene_dev_ec)
 ```
+
+Count number of CpGs without the DNA methylation data. Are they the same? Yes.
+```{r gene-ec-tI}
+gene_ecI <- annoec %>% group_by(ucsc_refgene_name) %>%
+    summarise(
+       nI = n()
+    )  %>% filter(nI > 3) 
+
+gene_ecI <- gene_ecI %>%
+          rename(name = ucsc_refgene_name)
+
+gene_dev_ecI <- 
+    merge(x = gene_ecI,
+          y = crcdev)
+
+gene_dev_ec_MI <- 
+    merge(x = gene_ec,
+          y = gene_ecI)
+summary(gene_dev_ec_MI$n - gene_dev_ec_MI$nI)
+```
+
 
 Now create the same figure Darryl wouldn't use for Figure 4.
 ```{r fig4-tumorM, fig.height=2, fig.width=3, echo=FALSE}
@@ -91,7 +113,8 @@ pe <- ggplot(gene_dev_ec,aes(x=Mpwd_avg, y=jdev)) +
         panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black", fill=NA)) +
-  ylab("Expression Deviance (log2)") +
+  ylab("Expression variability
+       (log2 Deviance)") +
   xlab("conservation (PWD)") +
   ylim(-0.5,20) + xlim(0,0.25) + ggtitle("Tumor M") +
   geom_text( 
@@ -103,8 +126,46 @@ pe <- ggplot(gene_dev_ec,aes(x=Mpwd_avg, y=jdev)) +
 
 pe 
 
-#ggsave("figs/sesame-tumorM.png",    plot = last_plot(),    width = 3,    height = 2,    dpi = 300,    units = "in" )
+ggsave("figs/sesame-tumorM.png",    plot = last_plot(),    width = 3,    height = 2,    dpi = 300,    units = "in" )
 ```
+
+
+And for tumor I:
+```{r fig4-tumorI, fig.height=2, fig.width=3, echo=FALSE}
+rvar <- cor(gene_dev_ec$Ipwd_avg,
+            gene_dev_ec$dev,use="complete.obs") %>%
+          round(2)
+
+dat_text <- data.frame(
+  label = paste("cor =",rvar)
+)
+
+pe <- ggplot(gene_dev_ec,aes(x=Ipwd_avg, y=jdev)) +
+  geom_point(shape = ".", alpha = 0.4) + 
+  geom_smooth(method="lm",color="red") +
+  theme( axis.text=element_text(size=8),
+         axis.title=element_text(size=10),
+         panel.background = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black", fill=NA)) +
+  ylab("Expression variability
+       (log2 Deviance)") +
+  xlab("conservation (PWD)") +
+  ylim(-0.5,20) + xlim(0,0.25) + ggtitle("Tumor I") +
+  geom_text( 
+      data    = dat_text,
+      mapping = aes(x = 0.15, y = 12, label = label),
+      hjust   = -0.05,
+      vjust   = -1
+    )
+
+pe 
+
+#ggsave("figs/sesame-tumorI.png",    plot = last_plot(),    width = 3,    height = 2,    dpi = 300,    units = "in" )
+```
+
+Let's see if number of CpGs predicts PWD. Then, let's create 2 groups of expression variability. Those with none and those with some. Then let's see if number of CpGs predicts PWD in each group. I think a lot of our PWDs = 0 are due to low numbers of CpGs, and this occurs more frequently in the genes that lack variability in expression (deviance = 0).
 
 ```{r}
 gene_dev_ec
@@ -112,9 +173,10 @@ gene_dev_ec
 
 
 ```{r}
-annoec %>% filter(ucsc_refgene_name=="A2M")
+#annoec %>% filter(ucsc_refgene_name=="A2M")
 ```
 
+Lastly, restrict # CpGs to >10 and watch the correlations get stronger.
 
 ```{r sI}
 sessionInfo()
