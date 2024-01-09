@@ -49,7 +49,6 @@ mean(annoec$Ipwd < 0.05, na.rm=T)
 
 Summarize by gene, merge with sc-RNAseq deviances & plot. First, how does the distribution of gene average PWD compare to the distribution of CpG PWDs?  
 
-DO THIS STILL
 ```{r gene-ec}
 gene_ec <- annoec %>% group_by(ucsc_refgene_name) %>%
     summarise(
@@ -73,6 +72,20 @@ gene_dev_ec <-
 dim(gene_dev_ec)
 ```
 
+
+Global distribution of gene-level average PWD.
+```{r distn-gene-pwd_avg}
+summary(gene_dev_ec$Mpwd_avg)
+summary(gene_dev_ec$Ipwd_avg)
+```
+
+What fraction of genes have average PWD < 0.05? (the cutoff in the paper)
+```{r}
+mean(gene_dev_ec$Mpwd_avg < 0.05, na.rm=T)
+mean(gene_dev_ec$Ipwd_avg < 0.05, na.rm=T)
+```
+ 
+
 Count number of CpGs without the DNA methylation data. Are they the same? Yes.
 ```{r gene-ec-tI}
 gene_ecI <- annoec %>% group_by(ucsc_refgene_name) %>%
@@ -94,7 +107,7 @@ summary(gene_dev_ec_MI$n - gene_dev_ec_MI$nI)
 ```
 
 
-Now create the same figure Darryl wouldn't use for Figure 4.
+
 ```{r fig4-tumorM, fig.height=2, fig.width=3, echo=FALSE}
 rvar <- cor(gene_dev_ec$Mpwd_avg,
             gene_dev_ec$dev) %>%
@@ -168,7 +181,7 @@ pe
 Let's see if number of CpGs predicts PWD. Then, let's create 2 groups of expression variability. Those with none and those with some. Then let's see if number of CpGs predicts PWD in each group. I think a lot of our PWDs = 0 are due to low numbers of CpGs, and this occurs more frequently in the genes that lack variability in expression (deviance = 0).
 
 ```{r}
-gene_dev_ec
+#gene_dev_ec
 ```
 
 
