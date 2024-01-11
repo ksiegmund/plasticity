@@ -12,7 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 Read in the deviances Kelly computed for single-cell colon cancer data.
 
 ```{r read-gene-tumor, warning=FALSE}
-fn <-  c("~kims/Google Drive/My Drive/MyFolder/People/Darryl Shibata/plasticity/20230123/forKIMnormaltumordeviancegraph1-23.xlsx")
+#fn <-  c("~kims/Google Drive/My Drive/MyFolder/People/Darryl Shibata/plasticity/20230123/forKIMnormaltumordeviancegraph1-23.xlsx")
+fn <-  c("~kims/Google Drive/My Drive/shibata/Shibata EPIC Data/datajy/forKIMnormaltumordeviancegraph1-23.xlsx")
 genet <- readxl::read_xlsx(fn,sheet = "gene_tumor",col_names = FALSE, skip=3)
 dim(genet)
 
@@ -45,7 +46,7 @@ crcdev <- cbind.data.frame( name = dat$gene,
                             dev = dat$`tumorepi+1`,
                             jdev = dat$jtumorepi,
                             depmap_esstl = dat$`DepMap-essential`)
-save(crcdev,file="data/crcdev.rda")
+#save(crcdev,file="data/crcdev.rda")
 ```
 
 ```{r si}
