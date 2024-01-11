@@ -87,7 +87,7 @@ table(nmis)
 Remove features that were NAs for all samples.
 ```{r filter}
 ec <- ec[nmis!=4,]
-save(ec,file="data/ec.rdat")
+#save(ec,file="data/ec.rdat")
 ```
 
 
